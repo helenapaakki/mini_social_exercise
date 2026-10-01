@@ -79,7 +79,10 @@
       {% if comments %}
       <ul class="list-group list-group-flush shadow-none border-0">
         {% for comment in comments %}
-        <li class="card shadow-none p-2 mt-2">
+        <li
+          class="card shadow-none p-2 mt-2"
+          id="comment-{{ comment.id }}"
+          >
           <div class="d-flex justify-content-between">
             <div>
               <strong><a href="/u/{{ comment.username }}">{{ user_display(comment.username) }}</a></strong>

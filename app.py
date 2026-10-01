@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 import collections
@@ -67,16 +67,220 @@ def query_db(query, args=(), one=False, commit=False):
             cur = db.execute(query, args)
         
         # For SELECT statements, fetch the results after the transaction block
-        if not commit:
-            rv = cur.fetchall()
-            return (rv[0] if rv else None) if one else rv
-        
-        # For write operations, we might want the cursor to get info like lastrowid
-        return cur
+        if commit:
+            db.commit()
+
+        rows = cur.fetchall()
+        return (rows[0] if rows else None) if one else rows
 
     except sqlite3.Error as e:
         print(f"Database error: {e}")
         return None
+
+MENTION_PATTERN = re.compile(r'(?<!\w)@([A-Za-z0-9_]{1,50})\b')
+
+
+def get_tagged_users(content):
+    """Find existing users mentioned with @username."""
+
+    if not content:
+        return []
+
+    usernames = MENTION_PATTERN.findall(content)
+
+    # Remove duplicate usernames
+    usernames = list(dict.fromkeys(usernames))
+
+    tagged_users = []
+
+    for username in usernames:
+        user = query_db(
+            '''
+            SELECT id, username
+            FROM users
+            WHERE username = ?
+            ''',
+            (username,),
+            one=True
+        )
+
+        if user is not None:
+            tagged_users.append(user)
+
+    return tagged_users
+
+
+
+def create_tag_notifications(
+        tagger_id,
+        source_type,
+        source_id,
+        post_id=None,
+        comment_id=None
+):
+    """Create tag records and notifications for @mentions."""
+
+    # Get the content that contains the @mentions
+    db = get_db()
+
+    if source_type == 'post':
+        cursor = db.execute(
+            'SELECT content FROM posts WHERE id = ?',
+            (source_id,)
+        )
+
+    elif source_type == 'comment':
+        cursor = db.execute(
+            'SELECT content FROM comments WHERE id = ?',
+            (source_id,)
+        )
+
+    else:
+        return
+
+    source = cursor.fetchone()
+
+    if source is None:
+        return
+
+    content = source[0]
+
+    tagged_users = get_tagged_users(content)
+
+    db = get_db()
+
+    for tagged_user in tagged_users:
+
+        # Don't notify someone if they tag themselves
+        if not tagged_user:
+            continue
+
+        if tagged_user['id'] == tagger_id:
+            continue
+
+        # Don't create the same tag twice
+        existing_tag = query_db(
+            '''
+            SELECT id
+            FROM tags
+            WHERE source_type = ?
+              AND source_id = ?
+              AND tagged_user_id = ?
+            ''',
+            (
+                source_type,
+                source_id,
+                tagged_user['id']
+            ),
+            one=True
+        )
+
+        if existing_tag:
+            continue
+
+        # Create the tag
+        cursor = db.execute(
+            '''
+            INSERT INTO tags
+            (
+                tagger_id,
+                tagged_user_id,
+                source_type,
+                source_id
+            )
+            VALUES (?, ?, ?, ?)
+            ''',
+            (
+                tagger_id,
+                tagged_user['id'],
+                source_type,
+                source_id
+            )
+        )
+
+        tag_id = cursor.lastrowid
+
+        # Create the notification
+        db.execute(
+            '''
+            INSERT INTO notifications
+            (
+                recipient_id,
+                actor_id,
+                type,
+                tag_id,
+                post_id,
+                comment_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                tagged_user['id'],
+                tagger_id,
+                'tag',
+                tag_id,
+                post_id,
+                comment_id
+            )
+        )
+
+    db.commit()
+
+@app.route('/notifications/<int:notification_id>/read')
+def mark_notification_read(notification_id):
+    user_id = session.get('user_id')
+
+    if not user_id:
+        return redirect(url_for('login'))
+
+    query_db(
+        """
+        UPDATE notifications
+        SET is_read = 1
+        WHERE id = ?
+          AND recipient_id = ?
+        """,
+        (notification_id, user_id),
+        commit=True
+    )
+
+    db = get_db()
+
+    cursor = db.execute(
+        """
+        SELECT post_id, comment_id
+        FROM notifications
+        WHERE id = ?
+            AND recipient_id = ?
+        """,
+    (notification_id, user_id)
+    )
+
+    notification = cursor.fetchone()
+
+    if notification is None:
+        return redirect(url_for('feed'))
+
+    if notification is None:
+        return redirect(url_for('feed'))
+
+    if notification[1]:
+        return redirect(
+            url_for(
+                'post_detail',
+                post_id=notification[0]
+            )
+        )
+
+    if notification[0]:
+        return redirect(
+            url_for(
+                'post_detail',
+                post_id=notification[0]
+            )
+        )
+
+    return redirect(url_for('feed'))
 
 @app.template_filter('datetimeformat')
 def datetimeformat(value):
@@ -110,6 +314,50 @@ def feed():
     offset = (page - 1) * POSTS_PER_PAGE
 
     current_user_id = session.get('user_id')
+    
+    notifications = []
+
+    if current_user_id:
+        notifications = query_db(
+    """
+    SELECT
+        n.id,
+        n.type,
+        n.is_read,
+        n.created_at,
+
+        actor.username AS actor_username,
+
+        n.post_id,
+        n.comment_id,
+
+        p.content AS post_content,
+        c.content AS comment_content
+
+    FROM notifications n
+
+    JOIN tags t
+        ON t.id = n.tag_id
+
+    JOIN users actor
+        ON actor.id = t.tagger_id
+
+    JOIN posts p
+        ON p.id = n.post_id
+
+    LEFT JOIN comments c
+        ON c.id = n.comment_id
+
+    WHERE n.recipient_id = ?
+        AND n.is_read = 0
+
+    ORDER BY n.created_at DESC
+
+    LIMIT 20
+    """,
+    (current_user_id,)
+)
+
     params = []
 
     #  2. Build the Query 
@@ -199,7 +447,8 @@ def feed():
                            page=page, # Pass current page number
                            per_page=POSTS_PER_PAGE, # Pass items per page
                            reaction_emojis=REACTION_EMOJIS,
-                           reaction_types=REACTION_TYPES)
+                           reaction_types=REACTION_TYPES,
+                           notifications=notifications)
 
 @app.route('/posts/new', methods=['POST'])
 def add_post():
@@ -220,9 +469,23 @@ def add_post():
     # Basic validation to ensure post is not empty
     if moderated_content and moderated_content.strip():
         db = get_db()
-        db.execute('INSERT INTO posts (user_id, content) VALUES (?, ?)',
-                   (user_id, moderated_content))
+
+        cursor = db.execute(
+            'INSERT INTO posts (user_id, content) VALUES (?, ?)',
+            (user_id, moderated_content)
+        )
+
+        post_id = cursor.lastrowid
+
         db.commit()
+
+        create_tag_notifications(
+            tagger_id=user_id,
+            source_type='post',
+            source_id=post_id,
+            post_id=post_id
+        )
+
         flash('Your post was successfully created!', 'success')
     else:
         # This will catch empty posts or posts that were fully censored
@@ -495,9 +758,26 @@ def add_comment(post_id):
     # Basic validation to ensure comment is not empty
     if content and content.strip():
         db = get_db()
-        db.execute('INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)',
-                   (post_id, user_id, content))
-        db.commit()
+
+        cursor = db.execute(
+            """
+            INSERT INTO comments 
+            (post_id, user_id, content)
+            VALUES (?, ?, ?)
+            """,
+            (post_id, user_id, content)
+        )
+
+        comment_id = cursor.lastrowid
+
+        create_tag_notifications(
+            tagger_id=user_id,
+            source_type='comment',
+            source_id=comment_id,
+            post_id=post_id,
+            comment_id=comment_id
+        )
+       
         flash('Your comment was added.', 'success')
     else:
         flash('Comment cannot be empty.', 'warning')

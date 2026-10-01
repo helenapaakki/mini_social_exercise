@@ -22,6 +22,83 @@
 </div>
 {% endif %}
 
+{% if session.get('user_id') and notifications %}
+<div class="col-md-8 mx-auto mb-4">
+
+  <div class="card shadow-sm">
+
+    <div class="card-body">
+
+      <h5 class="card-title">
+        Notifications
+      </h5>
+
+      {% for notification in notifications %}
+
+      <div class="border-bottom py-3">
+
+        <div>
+          <strong>
+            @{{ notification.actor_username }}
+          </strong>
+
+          tagged you
+          {% if notification.comment_id %}
+            in a comment
+          {% else %}
+            in a post
+          {% endif %}
+        </div>
+
+        {% if notification.post_id %}
+
+          {% if notification.comment_id %}
+
+            <p class="text-muted mb-1">
+              {{ notification.comment_content }}
+            </p>
+
+            <a
+              href="{{ url_for(
+                'mark_notification_read',
+                notification_id=notification.id
+              ) }}"
+              class="btn btn-sm btn-light"
+            >
+              View comment
+            </a>
+
+          {% else %}
+
+            <p class="text-muted mb-1">
+              {{ notification.post_content }}
+            </p>
+
+            <a
+              href="{{ url_for(
+                'mark_notification_read',
+                notification_id=notification.id
+              ) }}"
+              class="btn btn-sm btn-light"
+            >
+              View post
+            </a>
+
+          {% endif %}
+
+        {% endif %}
+
+      </div>
+
+      {% endfor %}
+
+    </div>
+
+  </div>
+
+</div>
+{% endif %}
+
 <h2 class="text-center border-bottom pb-2 mb-4"><span>Posts</span></h2>
 
 <div class="mb-4 text-center">
@@ -135,7 +212,9 @@
       {% endif %}
       <ul class="list-group list-group-flush shadow-none border-0">
         {% for comment in entry.comments[-2:] %}
-        <li class="card shadow-none p-2 mt-2">
+        <li 
+          class="card shadow-none p-2 mt-2"
+          id="comment-{{ comment.id }}">
           <div class="d-flex justify-content-between">
             <div>
               <strong><a href="/u/{{ comment.username }}">{{ user_display(comment.username) }}</a></strong>
