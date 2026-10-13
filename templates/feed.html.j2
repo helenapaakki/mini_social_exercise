@@ -49,51 +49,45 @@
             in a post
           {% endif %}
         </div>
+  {% if notification.post_id %}
+    <div class="d-flex align-items-center justify-content-between gap-2 mt-2 flex-wrap">
+      {% if notification.comment_id %}
+        <a
+            href="{{ url_for('mark_notification_read', notification_id=notification.id) }}"
+            class="btn btn-sm btn-light"
+        >
+            View comment
+        </a>
+      {% else %}
+        <a
+            href="{{ url_for('mark_notification_read', notification_id=notification.id) }}"
+            class="btn btn-sm btn-light"
+        >
+            View post
+        </a>
+      {% endif %}
 
-        {% if notification.post_id %}
-
-          {% if notification.comment_id %}
-
-            <p class="text-muted mb-1">
-              {{ notification.comment_content }}
-            </p>
-
-            <a
-              href="{{ url_for(
-                'mark_notification_read',
-                notification_id=notification.id
-              ) }}"
-              class="btn btn-sm btn-light"
-            >
-              View comment
-            </a>
-
-          {% else %}
-
-            <p class="text-muted mb-1">
-              {{ notification.post_content }}
-            </p>
-
-            <a
-              href="{{ url_for(
-                'mark_notification_read',
-                notification_id=notification.id
-              ) }}"
-              class="btn btn-sm btn-light"
-            >
-              View post
-            </a>
-
-          {% endif %}
-
-        {% endif %}
-
+      <form
+        action="{{ url_for('block_tag_notification', actor_id=notification.actor_id) }}"
+        method="POST"
+        class="m-0"
+        onsubmit="return confirm('Block future tag notifications from this user?');"
+      >
+        <button
+            type="submit"
+            class="btn btn-sm"
+            style="background-color: #212529; color: white; border: 1px solid #212529; font-weight: 600;"
+        >
+            Block notifications from @{{ notification.actor_username }}
+        </button>
+      </form>
+    </div>
+  {% endif %}
       </div>
 
       {% endfor %}
 
     </div>
-
   </div>
 
 </div>

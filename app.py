@@ -40,6 +40,17 @@ def get_db():
         )
         g.db.row_factory = sqlite3.Row
 
+        g.db.execute('''
+            CREATE TABLE IF NOT EXISTS tag_blocks (
+                blocker_id INTEGER NOT NULL,
+                blocked_user_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (blocker_id, blocked_user_id),
+                CHECK (blocker_id != blocked_user_id)
+            )
+        ''')
+        g.db.commit()
+
     return g.db
 
 
@@ -158,6 +169,18 @@ def create_tag_notifications(
         if tagged_user['id'] == tagger_id:
             continue
 
+        blocked = query_db(
+            '''
+            SELECT 1 FROM tag_blocks
+            WHERE blocker_id = ? AND blocked_user_id = ?
+            ''',
+            (tagged_user['id'], tagger_id),
+            one=True
+        )
+
+        if blocked:
+            continue
+        
         # Don't create the same tag twice
         existing_tag = query_db(
             '''
@@ -282,6 +305,67 @@ def mark_notification_read(notification_id):
 
     return redirect(url_for('feed'))
 
+@app.route('/notifications/block/<int:actor_id>', methods=['POST'])
+def block_tag_notification(actor_id):
+    """Silently blocks a user from tagging the current user in the future."""
+    user_id = session.get('user_id')
+
+    if not user_id:
+        return redirect(url_for('login'))
+
+    if actor_id == user_id:
+        flash("You cannot block yourself.", "warning")
+        return redirect(request.referrer or url_for('feed'))
+
+    actor = query_db(
+        'SELECT id FROM users WHERE id = ?',
+        (actor_id,),
+        one=True
+    )
+
+    if not actor:
+        abort(404)
+
+    query_db(
+        '''
+        INSERT OR IGNORE INTO tag_blocks
+            (blocker_id, blocked_user_id)
+        VALUES (?, ?)
+        ''',
+        (user_id, actor_id),
+        commit=True
+    )
+
+    flash(
+        'Tag notifications from this user are now blocked.',
+        'success'
+    )
+    return redirect(request.referrer or url_for('feed'))
+
+@app.route('/notifications/unblock/<int:actor_id>', methods=['POST'])
+def unblock_tag_notification(actor_id):
+    """Unblock a user"""
+    user_id = session.get('user_id')
+
+    if not user_id:
+        return redirect(url_for('login'))
+
+    query_db(
+        '''
+        DELETE FROM tag_blocks
+        WHERE blocker_id = ? AND blocked_user_id = ?
+        ''',
+        (user_id, actor_id),
+        commit=True
+    )
+
+    flash(
+        'Tag notifications from this user are now allowed again.',
+        'success'
+    )
+    return redirect(request.referrer or url_for('feed'))
+
+
 @app.template_filter('datetimeformat')
 def datetimeformat(value):
     if isinstance(value, datetime):
@@ -325,6 +409,7 @@ def feed():
         n.type,
         n.is_read,
         n.created_at,
+        n.actor_id AS actor_id,
 
         actor.username AS actor_username,
 
@@ -350,7 +435,13 @@ def feed():
 
     WHERE n.recipient_id = ?
         AND n.is_read = 0
-
+        AND NOT EXISTS (
+            SELECT 1
+            FROM tag_blocks tb
+            WHERE tb.blocker_id = n.recipient_id
+                AND tb.blocked_user_id = n.actor_id
+        )
+        
     ORDER BY n.created_at DESC
 
     LIMIT 20
