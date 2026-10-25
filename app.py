@@ -6,11 +6,17 @@ import json
 import sqlite3
 import hashlib
 import re
+import os
+from werkzeug.utils import secure_filename
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = '123456789' 
 DATABASE = 'database.sqlite'
+
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # Limit upload size to 5MB
+
+ALLOWED_PROFILE_PICTURE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 # Load censorship data
 # WARNING! The censorship.dat file contains disturbing language when decrypted. 
@@ -39,6 +45,25 @@ def get_db():
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         g.db.row_factory = sqlite3.Row
+
+        user_columns = {
+            row['name']
+            for row in g.db.execute(
+                'PRAGMA table_info(users)'
+            ).fetchall()
+        }
+
+        if 'display_name' not in user_columns:
+            g.db.execute(
+                'ALTER TABLE users ADD COLUMN display_name TEXT'
+            )
+
+        if 'profile_picture' not in user_columns:
+            g.db.execute(
+                'ALTER TABLE users ADD COLUMN profile_picture TEXT'
+            )
+
+        g.db.commit()
 
         g.db.execute('''
             CREATE TABLE IF NOT EXISTS tag_blocks (
@@ -621,6 +646,66 @@ def delete_post(post_id):
     flash('Your post was successfully deleted.', 'success')
     # Redirect back to the page the user came from, or the feed as a fallback
     return redirect(request.referrer or url_for('feed'))
+
+@app.route('/my-profile/update', methods=['POST'])
+def update_my_profile():
+    user_id = session.get('user_id')
+
+    if not user_id:
+        flash('Please log in to edit your profile.', 'warning')
+        return redirect(url_for('login'))
+
+    display_name = (
+        request.form.get('display_name') or ''
+    ).strip()
+
+    if len(display_name) > 50:
+         flash('Display name cannot exceed 50 characters.', 'danger') 
+         return redirect(
+             url_for('user_profile', username=session.get('username'))
+         )  
+
+    current_user = query_db(
+        'SELECT username, profile_picture FROM users WHERE id = ?',
+        (user_id,),
+        one=True
+    )
+
+    if not current_user:
+        session.clear()
+        return redirect(url_for('login'))
+
+    picture_name = current_user['profile_picture']
+    uploaded = request.files.get('profile_picture')
+
+    if uploaded and uploaded.filename:
+        safe_name = secure_filename(uploaded.filename)
+        extension = (
+            safe_name.rsplit('.', 1)[-1].lower()
+            if '.' in safe_name else ''
+        )
+
+        if extension not in ALLOWED_PROFILE_PICTURE_EXTENSIONS:
+            flash('Invalid file type for profile picture.', 'danger')
+            return redirect(
+                url_for('user_profile', username=current_user['username'])
+            )
+
+        upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'profile_pictures')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        picture_name = f"user_{user_id}.{extension}"
+        uploaded.save(os.path.join(upload_dir, picture_name))
+        picture_name = f"uploads/profile_pictures/{picture_name}"
+
+    query_db(
+        'UPDATE users SET display_name = ?, profile_picture = ? WHERE id = ?',
+        (display_name or None, picture_name, user_id),
+        commit=True
+    )
+
+    flash('Your profile has been updated.', 'success')
+    return redirect(url_for('user_profile', username=current_user['username']))
 
 @app.route('/u/<username>')
 def user_profile(username):
@@ -1254,11 +1339,68 @@ def user_risk_analysis(user_id):
             password: admin
         Then, navigate to the /admin endpoint. (http://localhost:8080/admin)
     """
+
+    user = query_db(
+        'SELECT id, profile, created_at FROM users WHERE id = ?',
+        (user_id,),
+        one=True
+    )
+
+    if user is None:
+        return 0.0
+
+    account_age_days = (
+        datetime.utcnow() - user['created_at']
+    ).days
+
+    _, profile_score = moderate_content(user['profile'] or '')
+
+    posts = query_db(
+        'SELECT content FROM posts WHERE user_id = ?',
+        (user_id,)
+    ) or []
+
+    post_scores = []
+
+    for post in posts:
+        _, post_score = moderate_content(post['content'] or '')
+        post_scores.append(post_score)
+
+    average_post_score = (
+        sum(post_scores) / len(post_scores)
+        if post_scores else 0.0
+    )
+
+    comments = query_db(
+        'SELECT content FROM comments WHERE user_id = ?',
+        (user_id,)
+    ) or []
+
+    comments_scores = []
+
+    for comment in comments:
+        _, comment_score = moderate_content(comment['content'] or '')
+        comments_scores.append(comment_score)
+
+    average_comment_score = (
+        sum(comments_scores) / len(comments_scores)
+        if comments_scores else 0.0
+    )
+
+    content_risk_score = (
+        profile_score
+        + average_post_score * 3
+        + average_comment_score
+    )
+
+    if account_age_days < 7:
+        content_risk_score *= 1.5
+    elif account_age_days < 30:
+        content_risk_score *= 1.2
+
+    user_risk_score = min(5.0, content_risk_score)
     
-    score = 0
-
-    return score;
-
+    return float(user_risk_score)
     
 # Assignment 2.1
 def moderate_content(content):
@@ -1281,6 +1423,51 @@ def moderate_content(content):
     moderated_content = content
     score = 0
     
+    for word in TIER1_WORDS:
+        pattern = r'\b' + re.escape(word) + r'\b'
+
+        if re.search(pattern, content, re.IGNORECASE):
+            return "[content removed due to severe violation]", 5.0
+
+    for phrase in TIER2_PHRASES:
+        pattern = r'\b' + re.escape(phrase) + r'\b'
+
+        if re.search(pattern, content, re.IGNORECASE):
+            return "[content removed due to spam/scam policy]", 5.0
+
+    for word in TIER3_WORDS:
+        pattern = r'\b' + re.escape(word) + r'\b'
+
+        matches = re.findall(pattern, moderated_content, re.IGNORECASE)
+        score += len(matches) * 2.0
+
+        moderated_content = re.sub(
+            pattern,
+            lambda match: '*' * len(match.group()),
+            moderated_content,
+            flags=re.IGNORECASE
+        )
+
+    url_pattern = r'https?://\S+|www\.\S+'
+
+    urls = re.findall(url_pattern, moderated_content, re.IGNORECASE)
+    score += len(urls) * 2.0
+
+    moderated_content = re.sub(
+        url_pattern,
+        '[link removed]',
+        moderated_content,
+        flags=re.IGNORECASE
+    )
+
+    letters = [char for char in moderated_content if char.isalpha()]
+
+    if len(letters) > 15:
+        uppercase_count = sum(1 for char in letters if char.isupper())
+
+        if uppercase_count / len(letters) > 0.70:
+            score += 0.5
+
     return moderated_content, score
 
 # Coding Assignment #3
@@ -1306,8 +1493,6 @@ def recommend(user_id, filter_following):
     """
 
     recommended_posts = {} 
-
-    return recommended_posts;
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)
