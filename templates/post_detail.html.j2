@@ -24,7 +24,13 @@
       </div>
       
       <p class="card-text mt-2">{{ post.content }}</p>
-
+      <a
+        class="btn btn-sm mt-2"
+        style="background-color: black; color: white; border: 1px solid black;"
+        href="mailto:?subject={{ ('Check out this post by ' ~ post.username)|urlencode }}&body={{ (post.content ~ '\n\nView post: ' ~ request.url_root.rstrip('/') ~ url_for('post_detail', post_id=post.id))|urlencode }}"
+      >
+        Share via E-mail
+      </a>
       <!-- Reactions Display and Add Reaction Button (Copied from feed.html.j2) -->
       <div class="d-flex align-items-center mt-2 mb-2">
         <!-- Display existing reactions -->

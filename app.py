@@ -846,6 +846,9 @@ def about():
 def privacy():
     return render_template('privacy.html.j2')
 
+@app.route('/tutorial')
+def tutorial():
+    return render_template('tutorial.html.j2', title= 'Getting Started')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -1491,8 +1494,137 @@ def recommend(user_id, filter_following):
     - http://www.configworks.com/mz/handout_recsys_sac2010.pdf
     - https://www.researchgate.net/publication/227268858_Recommender_Systems_Handbook
     """
+    
+    if not user_id:
+        return []
 
-    recommended_posts = {} 
+    positive_reactions = ('like', 'love', 'laugh')
+
+    stop_words = {
+        'the', 'and', 'for', 'are', 'but', 'not', 'you',
+        'your', 'with', 'this', 'that', 'have', 'has',
+        'was', 'were', 'from', 'they', 'their', 'what',
+        'when', 'where', 'who', 'will', 'would', 'can',
+        'just', 'about', 'into', 'its', 'our', 'out',
+        'all', 'get', 'got', 'how', 'his', 'her', 'she',
+        'him', 'them', 'then', 'than', 'too', 'very',
+        'been', 'being', 'some', 'more', 'one', 'like',
+        'love', 'lol', 'www', 'http', 'https'
+    }
+
+    def keywords(text):
+        words = re.findall(r'\b[a-zA-Z]{3,}\b', (text or '').lower())
+        return {word for word in words if word not in stop_words}
+
+    placeholders = ','.join('?' for _ in positive_reactions)
+
+    liked_posts = query_db(
+        f'''
+        SELECT p.content
+        FROM reactions r
+        JOIN posts p ON p.id = r.post_id
+        WHERE r.user_id = ?
+          AND r.reaction_type IN ({placeholders})
+        ''',
+        (user_id, *positive_reactions)
+    )
+
+    if liked_posts is None:
+        return []
+
+    interest_words = set()
+
+    for post in liked_posts:
+        interest_words.update(keywords(post['content']))
+
+    followed_users = query_db(
+        '''
+        SELECT followed_id
+        FROM follows
+        WHERE follower_id = ?
+        ''',
+        (user_id,)
+    )
+
+    if followed_users is None:
+        return []
+
+    followed_ids = {
+        row['followed_id'] for row in followed_users
+    }
+
+    reacted_posts = query_db(
+        '''
+        SELECT post_id
+        FROM reactions
+        WHERE user_id = ?
+        ''',
+        (user_id,)
+    )
+
+    if reacted_posts is None:
+        return []
+
+    reacted_ids = {
+        row['post_id'] for row in reacted_posts
+    }
+
+    candidates = query_db(
+        '''
+        SELECT p.id, p.content, p.created_at,
+               u.username, u.id AS user_id,
+               COUNT(r.id) AS total_reactions
+        FROM posts p
+        JOIN users u ON u.id = p.user_id
+        LEFT JOIN reactions r ON r.post_id = p.id
+        WHERE p.user_id != ?
+        GROUP BY p.id, p.content, p.created_at,
+                 u.username, u.id
+        ORDER BY p.created_at DESC
+        ''',
+        (user_id,)
+    )
+
+    if candidates is None:
+        return []
+
+    scored_posts = []
+
+    for post in candidates:
+        post_id = post['id']
+        author_id = post['user_id']
+
+        if post_id in reacted_ids:
+            continue
+
+        if filter_following and author_id not in followed_ids:
+            continue
+
+        post_keywords = keywords(post['content'])
+        matching_words = len(interest_words & post_keywords)
+
+        score = matching_words * 2
+
+        if author_id in followed_ids:
+            score += 3
+
+        if not interest_words:
+            score += 1
+
+        scored_posts.append((
+            score,
+            str(post['created_at'] or ''),
+            post['total_reactions'],
+            post
+        ))
+
+    scored_posts.sort(
+        key=lambda item: (item[0], item[1], item[2]),
+        reverse=True
+    )
+
+    return [item[3] for item in scored_posts[:5]]
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)

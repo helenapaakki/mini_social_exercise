@@ -1,0 +1,158 @@
+
+{% extends "base.html.j2" %}
+
+{% block content %}
+
+<div class="container col-lg-9 mx-auto mt-4 mb-5">
+
+  <div class="text-center mb-5">
+    <h1>Welcome to Mini Social!</h1>
+    <p class="text-muted">
+      New here? Follow this quick guide to learn how to use the platform.
+    </p>
+  </div>
+
+  <!-- Step 1: Create a post -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>1. Create your first post</h4>
+      <p>
+        Share your thoughts, experiences or anything interesting
+        with the Mini Social community.
+      </p>
+      <ol>
+        <li>Go to the Home page.</li>
+        <li>Find the "Create a new post" box.</li>
+        <li>Write something in the text area.</li>
+        <li>Click the "Post" button to publish it.</li>
+      </ol>
+      <a href="{{ url_for('feed') }}" class="btn btn-dark">
+        Go to Home
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 2: React to posts -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>2. Leave reactions</h4>
+      <p>
+        Show other users what you think about their posts
+        by leaving a reaction.
+      </p>
+      <ol>
+        <li>Find a post you like.</li>
+        <li>Click the small "+" button next to the reactions.</li>
+        <li>Choose one of the available reactions.</li>
+        <li>Your reaction will appear below the post.</li>
+      </ol>
+      <p class="text-muted mb-0">
+        You can also click your existing reaction to remove it.
+      </p>
+    </div>
+  </div>
+
+  <!-- Step 3: Comment -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>3. Comment on posts</h4>
+      <p>
+        Start conversations by commenting on other users' posts.
+      </p>
+      <ol>
+        <li>Find a post you want to comment on.</li>
+        <li>Click "Add Comment".</li>
+        <li>Write your message.</li>
+        <li>Click "Submit Comment".</li>
+      </ol>
+      <p class="text-muted mb-0">
+        Use "Show all comments" to view the full discussion.
+      </p>
+    </div>
+  </div>
+
+  <!-- Step 4: Follow users -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>4. Follow other users</h4>
+      <p>
+        Follow people whose posts you are interested in.
+      </p>
+      <ol>
+        <li>Click a username above one of their posts.</li>
+        <li>You will be taken to their profile.</li>
+        <li>Click the "Follow" button.</li>
+        <li>You can visit your profile to see who you follow.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Step 5: Explore profiles -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>5. Explore user profiles</h4>
+      <p>
+        Visit other users' profiles to learn more about them.
+      </p>
+      <ul>
+        <li>View their profile information.</li>
+        <li>See their latest posts.</li>
+        <li>Read their latest comments.</li>
+        <li>See how many followers they have.</li>
+      </ul>
+      <a href="{{ url_for('feed') }}" class="btn btn-dark">
+        Explore posts
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 6: Feed filters -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>6. Customize your feed</h4>
+      <p>
+        Use the filters at the top of the Home page to find posts.
+      </p>
+      <ul>
+        <li><strong>New:</strong> See the newest posts.</li>
+        <li><strong>Popular:</strong> Discover popular posts.</li>
+        <li><strong>Recommended:</strong> See recommended posts.</li>
+        <li><strong>All:</strong> Browse all posts.</li>
+        <li><strong>Following:</strong> See posts from users you follow.</li>
+      </ul>
+      <a href="{{ url_for('feed') }}" class="btn btn-dark">
+        Explore the feed
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 7: Share posts -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>7. Share posts via email</h4>
+      <p>
+        Found an interesting post? Share it with someone else!
+      </p>
+      <ol>
+        <li>Find the post you want to share.</li>
+        <li>Click "Share via E-mail".</li>
+        <li>Your email application will open with the post details.</li>
+        <li>Enter the recipient's email address and send.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Finish -->
+  <div class="text-center mt-5">
+    <h3>You're ready to get started!</h3>
+    <p class="text-muted">
+      Start posting, connecting and interacting with the community.
+    </p>
+    <a href="{{ url_for('feed') }}" class="btn btn-dark btn-lg">
+      Start exploring Mini Social
+    </a>
+  </div>
+
+</div>
+
+{% endblock %}
