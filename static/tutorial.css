@@ -1,0 +1,58 @@
+/* Styles scoped to the interactive tutorial so the existing site is unaffected. */
+.tutorial-shell { max-width: 1120px; margin: 0 auto; }
+.tutorial-logo { width: 54px; height: 54px; object-fit: contain; }
+.tutorial-heading { margin-bottom: 1rem; }
+.tutorial-sidebar { position: sticky; top: 1rem; }
+.tutorial-sidebar .nav-link { color: #343a40; border-radius: .5rem; }
+.tutorial-sidebar .nav-link.active { color: #fff; background: var(--bs-primary); }
+.avatar { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #e8edf5; color: #24344d; font-weight: 700; }
+.avatar-you { background: #dcefe4; color: #17643a; }
+.avatar-large { width: 76px; height: 76px; flex-basis: 76px; font-size: 1.7rem; }
+.post-card .post-content { white-space: normal; overflow-wrap: anywhere; }
+.tutorial-hint { border-left: 4px solid var(--bs-primary); background: #f1f5fb; padding: .9rem 1rem; border-radius: .35rem; }
+#view-challenge .form-check-input { cursor: pointer; }
+@media (max-width: 991.98px) {
+  .tutorial-sidebar { position: static; }
+  .tutorial-sidebar .nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tutorial-sidebar .nav-link { font-size: .9rem; }
+}
+@media (max-width: 575.98px) {
+  .tutorial-sidebar .nav { grid-template-columns: 1fr; }
+}
+/* Make all tutorial buttons blue by default */
+.tutorial-shell .btn {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #ffffff;
+}
+
+/* Button hover effect */
+.tutorial-shell .btn:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+    color: #ffffff;
+}
+
+/* Disabled buttons */
+.tutorial-shell .btn:disabled {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #ffffff;
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* Restore original appearance of React and Comment buttons */
+.tutorial-shell .post-card .reaction-button.btn-light,
+.tutorial-shell .post-card button[data-action="toggle-comments"] {
+    background-color: #f8f9fa !important;
+    border-color: #f8f9fa !important;
+    color: #212529 !important;
+}
+
+/* Original hover appearance */
+.tutorial-shell .post-card .reaction-button.btn-light:hover,
+.tutorial-shell .post-card button[data-action="toggle-comments"]:hover {
+    background-color: #e2e6ea !important;
+    border-color: #dae0e5 !important;
+    color: #212529 !important;
+}

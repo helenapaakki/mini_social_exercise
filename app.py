@@ -848,7 +848,7 @@ def privacy():
 
 @app.route('/tutorial')
 def tutorial():
-    return render_template('tutorial.html.j2', title= 'Getting Started')
+    return render_template('tutorial.html.j2', title= 'Tutorial')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
